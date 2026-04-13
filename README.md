@@ -12,3 +12,5 @@ Due to the limited number of swing modes that ESPHome supports swing_mode used i
 
 If you want add this code to main ESPHome repo you can do it.
 You can use this code however you want.
+
+Another [reference](https://github.com/TRuHa83/ESPHome_IR_Haier_Climate)
