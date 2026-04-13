@@ -4,6 +4,9 @@
 #include "esphome/components/climate_ir/climate_ir.h"
 #include "esphome/components/climate/climate_mode.h"
 
+namespace esphome {
+namespace haier_ac_ir {
+
 static const uint32_t MARK = 530;
 static const uint32_t SPACE_ZERO = 575;
 static const uint32_t SPACE_ONE = 1650;
@@ -46,9 +49,10 @@ enum ac_mode_t : uint8_t {
     MODE_DEHUMIDIFICATION = 0b010,
 };
 
-class HaierClimate : public climate_ir::ClimateIR {
+
+class HaierIRClimate : public climate_ir::ClimateIR {
 public:
-    HaierClimate()
+    HaierIRClimate()
         : climate_ir::ClimateIR(
             MIN_TEMP,
             MAX_TEMP,
@@ -63,8 +67,8 @@ public:
             },
             { 
                 climate::CLIMATE_SWING_OFF,
-                climate::CLIMATE_SWING_BOTH,
-                climate::CLIMATE_SWING_VERTICAL,
+                // climate::CLIMATE_SWING_BOTH,
+                // climate::CLIMATE_SWING_VERTICAL,
                 climate::CLIMATE_SWING_HORIZONTAL
             },
             {
@@ -479,3 +483,6 @@ protected:
         return true;
     }
 };
+
+} // namespace haier_ac_ir
+} // namespace esphome
