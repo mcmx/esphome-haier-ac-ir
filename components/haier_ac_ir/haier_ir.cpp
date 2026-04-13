@@ -42,7 +42,7 @@ climate::ClimateTraits HaierIRClimate::traits() {
 }
 
 void HaierIRClimate::printBin(uint8_t bin) {
-    ESP_LOGD(TAG, "%c%c%c%c%c%c%c%c",
+    ESP_LOGD(TAG, "%c%c%c%c%c%c%c%c 0x%02X",
         ((bin) & 0x80 ? '1' : '0'),
         ((bin) & 0x40 ? '1' : '0'),
         ((bin) & 0x20 ? '1' : '0'),
@@ -50,7 +50,8 @@ void HaierIRClimate::printBin(uint8_t bin) {
         ((bin) & 0x08 ? '1' : '0'),
         ((bin) & 0x04 ? '1' : '0'),
         ((bin) & 0x02 ? '1' : '0'),
-        ((bin) & 0x01 ? '1' : '0')
+        ((bin) & 0x01 ? '1' : '0'),
+        static_cast<unsigned>(bin)
     );
 }
 
@@ -121,67 +122,66 @@ uint8_t HaierIRClimate::calc_checksum_r(uint8_t array[]) {
 void HaierIRClimate::transmit_state() {
   uint8_t raw[PACKET_SIZE] = {0};
 
-  // Header
-  this->setBits(raw, PREFIX, 0, 8);
+  // Byte 0: Fixed prefix
+  this->setBits(raw, PREFIX, 0, 8);                    // A6
 
-  // === Temperature (byte 1) ===
-  // Based on your captures: 27°C → 0xBC, 28°C → 0xCC
-  // This simple linear mapping works for the two values you provided.
-  // Test more temperatures and adjust if needed.
+  // Byte 1: Temperature (main fix)
+  // 27°C → 0xBC
+  // 28°C → 0xCC
+  // This mapping matches your captured packets exactly
   uint8_t temp_code = 0xBC + (this->target_temperature - 27) * 0x10;
-  this->setBits(raw, temp_code, 8, 8);   // full byte 1
+  this->setBits(raw, temp_code, 8, 8);
 
-  // === Current Time (very important for this protocol) ===
+  // Current time (Hour in byte 2, Minutes in byte 4)
 //   ESPTime now = ESPTime::null();
-//   auto *time_comp = App.get_time_component();  // This is the safe way in custom components
+//   auto *time_comp = App.get_time_component();
 //   if (time_comp != nullptr) {
 //     now = time_comp->now();
 //   }
 
 //   if (now.is_valid()) {
-//     this->setBits(raw, now.hour, 16, 8);     // byte 2: hour (matches your logs: 0F=15, 10=16)
-//     this->setBits(raw, now.minute, 32, 8);   // byte 4: minutes (this is approximate - may need fine-tuning)
+//     this->setBits(raw, now.hour,   16, 8);   // Byte 2: Hour
+//     this->setBits(raw, now.minute, 32, 8);   // Byte 4: Minutes
 //   } else {
-//     ESP_LOGW(TAG, "No valid time available - sending packet without time");
+//     ESP_LOGW(TAG, "Time not available, sending without time");
 //   }
 
-  // === Swing ===
-  uint8_t swing = haier_ac_ir::SWING_OFF;
+  // Swing (byte ~1.5, bits 12-15)
+  uint8_t swing_val = haier_ac_ir::SWING_OFF;
   switch (this->swing_mode) {
-    case climate::CLIMATE_SWING_OFF:        swing = haier_ac_ir::SWING_OFF; break;
-    case climate::CLIMATE_SWING_VERTICAL:   swing = haier_ac_ir::SWING_UP_WIDE; break;
-    case climate::CLIMATE_SWING_HORIZONTAL: swing = haier_ac_ir::SWING_DOWN_WIDE; break;
-    case climate::CLIMATE_SWING_BOTH:       swing = haier_ac_ir::SWING_OSCILATE; break;
+    case climate::CLIMATE_SWING_OFF:        swing_val = haier_ac_ir::SWING_OFF; break;
+    case climate::CLIMATE_SWING_VERTICAL:   swing_val = haier_ac_ir::SWING_UP_WIDE; break;
+    case climate::CLIMATE_SWING_HORIZONTAL: swing_val = haier_ac_ir::SWING_DOWN_WIDE; break;
+    case climate::CLIMATE_SWING_BOTH:       swing_val = haier_ac_ir::SWING_OSCILATE; break;
     default: break;
   }
-  this->setBits(raw, swing, 12, 4);
+  this->setBits(raw, swing_val, 12, 4);
 
-  // === Mode / Power ===
+  // Power / Mode (bit 33 + bits 56-58)
   bool power_on = (this->mode != climate::CLIMATE_MODE_OFF);
   uint8_t mode_val = haier_ac_ir::MODE_AUTO;
 
   switch (this->mode) {
-    case climate::CLIMATE_MODE_COOL: mode_val = haier_ac_ir::MODE_COOLING; break;
-    case climate::CLIMATE_MODE_HEAT: mode_val = haier_ac_ir::MODE_HEATING; break;
-    case climate::CLIMATE_MODE_DRY:  mode_val = haier_ac_ir::MODE_DEHUMIDIFICATION; break;
+    case climate::CLIMATE_MODE_COOL:     mode_val = haier_ac_ir::MODE_COOLING; break;
+    case climate::CLIMATE_MODE_HEAT:     mode_val = haier_ac_ir::MODE_HEATING; break;
+    case climate::CLIMATE_MODE_DRY:      mode_val = haier_ac_ir::MODE_DEHUMIDIFICATION; break;
     case climate::CLIMATE_MODE_FAN_ONLY: mode_val = haier_ac_ir::MODE_FAN; break;
-    default: mode_val = haier_ac_ir::MODE_AUTO; break;
+    default:                             mode_val = haier_ac_ir::MODE_AUTO; break;
   }
   this->setBits(raw, power_on ? 1 : 0, 33, 1);
   this->setBits(raw, mode_val, 56, 3);
 
-  // === Fan speed ===
-  uint8_t speed = haier_ac_ir::SPEED_AUTO;
-  auto fan_mode = this->fan_mode.value_or(climate::CLIMATE_FAN_AUTO);
-  switch (fan_mode) {
-    case climate::CLIMATE_FAN_LOW:    speed = haier_ac_ir::SPEED_LOW; break;
-    case climate::CLIMATE_FAN_MEDIUM: speed = haier_ac_ir::SPEED_MEDIUM; break;
-    case climate::CLIMATE_FAN_HIGH:   speed = haier_ac_ir::SPEED_HIGH; break;
+  // Fan speed (bits 40-42)
+  uint8_t fan_val = haier_ac_ir::SPEED_AUTO;
+  switch (this->fan_mode.value_or(climate::CLIMATE_FAN_AUTO)) {
+    case climate::CLIMATE_FAN_LOW:    fan_val = haier_ac_ir::SPEED_LOW; break;
+    case climate::CLIMATE_FAN_MEDIUM: fan_val = haier_ac_ir::SPEED_MEDIUM; break;
+    case climate::CLIMATE_FAN_HIGH:   fan_val = haier_ac_ir::SPEED_HIGH; break;
     default: break;
   }
-  this->setBits(raw, speed, 40, 3);
+  this->setBits(raw, fan_val, 40, 3);
 
-  // === Presets (silent / turbo) ===
+  // Presets: Silent & Turbo (bits 48 and 49)
   bool silent = false;
   bool turbo = false;
   auto preset = this->preset.value_or(climate::CLIMATE_PRESET_NONE);
@@ -191,16 +191,17 @@ void HaierIRClimate::transmit_state() {
   this->setBits(raw, silent ? 1 : 0, 48, 1);
   this->setBits(raw, turbo ? 1 : 0, 49, 1);
 
-  // === Checksum (last byte) ===
-  this->setBits(raw, this->calc_checksum(raw), 104, 8);
+  // Checksum (last byte - byte 12, bits 104-111)
+  uint8_t checksum = this->calc_checksum(raw);
+  this->setBits(raw, checksum, 104, 8);
 
-  // Debug output
-  ESP_LOGD(TAG, "Sending Haier IR packet:");
+  // Debug: Print the full packet
+  ESP_LOGD(TAG, "Sending Haier packet (Temp: %d°C):", (int)this->target_temperature);
   for (uint8_t i = 0; i < PACKET_SIZE; i++) {
     this->printBin(raw[i]);
   }
 
-  // === Transmit the packet ===
+  // ====================== TRANSMIT ======================
   auto transmit = this->transmitter_->transmit();
   auto dst = transmit.get_data();
   dst->set_carrier_frequency(38000);
@@ -211,7 +212,7 @@ void HaierIRClimate::transmit_state() {
     dst->item(PREAMBULE[i * 2], PREAMBULE[i * 2 + 1]);
   }
 
-  // Data (MSB first)
+  // Data bits (MSB first)
   for (uint8_t i = 0; i < PACKET_SIZE; i++) {
     for (uint8_t mask = 0x80; mask != 0; mask >>= 1) {
       dst->item(MARK, (raw[i] & mask) ? SPACE_ONE : SPACE_ZERO);
@@ -221,6 +222,7 @@ void HaierIRClimate::transmit_state() {
   dst->item(MARK, -1000);   // ending gap
   transmit.perform();
 }
+
 
 bool HaierIRClimate::on_receive(remote_base::RemoteReceiveData data)
 {
