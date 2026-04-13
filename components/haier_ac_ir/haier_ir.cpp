@@ -191,7 +191,7 @@ void HaierIRClimate::transmit_state()
     }
 
     uint8_t speed;
-    switch (this->fan_mode.value_or(255))
+    switch (this->fan_mode.value_or(climate::CLIMATE_FAN_ON))
     {
         case climate::CLIMATE_FAN_AUTO:
             speed = haier_ac_ir::SPEED_AUTO;
@@ -216,7 +216,7 @@ void HaierIRClimate::transmit_state()
 
     bool silent, turbo;
         
-    switch (this->preset.value_or(255)) {
+    switch (this->preset.value_or(climate::CLIMATE_PRESET_NONE)) {
         case climate::CLIMATE_PRESET_NONE:
             silent = false;
             turbo = false;
