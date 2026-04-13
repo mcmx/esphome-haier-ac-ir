@@ -18,7 +18,7 @@ static const uint32_t PREAMBULE[] = {
     4500,
 };
 static const uint8_t PREFIX = 0b10100110;
-static const uint8_t PACKET_SIZE = 14;
+static const uint8_t PACKET_SIZE = 13;
 static const uint8_t BURST_SIZE = 230;
 
 static const char* const TAG = "haier_ac_ir.climate";
@@ -91,7 +91,7 @@ protected:
     // говнокод
     uint8_t readUnallinedByte(uint8_t array[], uint8_t offset, uint8_t length);
 
-    void setByte(uint8_t array[], uint8_t value, uint8_t offset, uint8_t length);
+    void setBits(uint8_t array[], uint8_t value, uint8_t bit_offset, uint8_t num_bits);
 
     uint8_t calc_checksum(uint8_t array[]);
     uint8_t calc_checksum_r(uint8_t array[]);
