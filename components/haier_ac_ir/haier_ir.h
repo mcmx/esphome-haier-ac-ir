@@ -125,7 +125,22 @@ protected:
     }
 
     void setByte(uint8_t array[], uint8_t value, uint8_t offset, uint8_t length) {
-        array[offset / 8] |= value << 8 - (offset % 8) - length;
+        uint8_t byte_idx = offset / 8;
+        uint8_t bit_idx  = offset % 8;   // bit position inside the byte (0 = LSB)
+
+        // Create a mask with 'length' ones, shifted to the correct position
+        uint16_t mask = ((1u << length) - 1) << bit_idx;
+
+        // Clear the bits first, then OR in the new value
+        array[byte_idx] &= ~mask;
+        array[byte_idx] |= (value << bit_idx) & mask;
+
+        // If the field crosses into the next byte (rare with length <= 8, but safe)
+        if (bit_idx + length > 8) {
+            uint8_t overflow_bits = bit_idx + length - 8;
+            array[byte_idx + 1] &= ~((1u << overflow_bits) - 1);
+            array[byte_idx + 1] |= (value >> (length - overflow_bits));
+        }
     }
 
     uint8_t calc_checksum(uint8_t array[]) {
@@ -163,16 +178,16 @@ protected:
         uint8_t swing;
         switch (this->swing_mode) {
             case climate::CLIMATE_SWING_OFF:
-                swing = SWING_OFF;
+                swing = haier_ac_ir::SWING_OFF;
                 break;
             case climate::CLIMATE_SWING_VERTICAL:
-                swing = SWING_UP_WIDE;
+                swing = haier_ac_ir::SWING_UP_WIDE;
                 break;
             case climate::CLIMATE_SWING_HORIZONTAL:
-                swing = SWING_DOWN_WIDE;
+                swing = haier_ac_ir::SWING_DOWN_WIDE;
                 break;
             case climate::CLIMATE_SWING_BOTH:
-                swing = SWING_OSCILATE;
+                swing = haier_ac_ir::SWING_OSCILATE;
                 break;
             default:
                 swing = climate::SWING_OFF;
@@ -184,32 +199,32 @@ protected:
         {
             case climate::CLIMATE_MODE_OFF:
                 state = false;
-                mode = MODE_AUTO;
+                mode = haier_ac_ir::MODE_AUTO;
                 break;
             case climate::CLIMATE_MODE_AUTO:
             case climate::CLIMATE_MODE_HEAT_COOL:
                 state = true;
-                mode = MODE_AUTO;
+                mode = haier_ac_ir::MODE_AUTO;
                 break;
             case climate::CLIMATE_MODE_COOL:
                 state = true;
-                mode = MODE_COOLING;
+                mode = haier_ac_ir::MODE_COOLING;
                 break;
             case climate::CLIMATE_MODE_HEAT:
                 state = true;
-                mode = MODE_HEATING;
+                mode = haier_ac_ir::MODE_HEATING;
                 break;
             case climate::CLIMATE_MODE_FAN_ONLY:
                 state = true;
-                mode = MODE_FAN;
+                mode = haier_ac_ir::MODE_FAN;
                 break;
             case climate::CLIMATE_MODE_DRY:
                 state = true;
-                mode = MODE_DEHUMIDIFICATION;
+                mode = haier_ac_ir::MODE_DEHUMIDIFICATION;
                 break;
             default:
                 state = false;
-                mode = MODE_AUTO;
+                mode = haier_ac_ir::MODE_AUTO;
                 break;
         }
 
@@ -217,23 +232,23 @@ protected:
         switch (this->fan_mode.value_or(255))
         {
             case climate::CLIMATE_FAN_AUTO:
-                speed = SPEED_AUTO;
+                speed = haier_ac_ir::SPEED_AUTO;
                 break;
 
             case climate::CLIMATE_FAN_LOW:
-                speed = SPEED_LOW;
+                speed = haier_ac_ir::SPEED_LOW;
                 break;
             
             case climate::CLIMATE_FAN_MEDIUM:
-                speed = SPEED_MEDIUM;
+                speed = haier_ac_ir::SPEED_MEDIUM;
                 break;
 
             case climate::CLIMATE_FAN_HIGH:
-                speed = SPEED_HIGH;
+                speed = haier_ac_ir::SPEED_HIGH;
                 break;
 
             default:
-                speed = SPEED_AUTO;
+                speed = haier_ac_ir::SPEED_AUTO;
                 break;
         }
 
@@ -403,17 +418,17 @@ protected:
 
         // Костыль
         switch (swing) {
-            case SWING_OFF:
+            case haier_ac_ir::SWING_OFF:
                 this->swing_mode = climate::CLIMATE_SWING_OFF;
                 break;
-            case SWING_UP:
-            case SWING_UP_WIDE:
+            case haier_ac_ir::SWING_UP:
+            case haier_ac_ir::SWING_UP_WIDE:
                 this->swing_mode = climate::CLIMATE_SWING_VERTICAL;
                 break;
-            case SWING_DOWN_WIDE:
+            case haier_ac_ir::SWING_DOWN_WIDE:
                 this->swing_mode = climate::CLIMATE_SWING_HORIZONTAL;
                 break;
-            case SWING_OSCILATE:
+            case haier_ac_ir::SWING_OSCILATE:
                 this->swing_mode = climate::CLIMATE_SWING_BOTH;
                 break;
             default:
@@ -425,19 +440,19 @@ protected:
         } else {
             switch (mode)
             {
-                case MODE_AUTO:
+                case haier_ac_ir::MODE_AUTO:
                     this->mode = climate::CLIMATE_MODE_HEAT_COOL;
                     break;
-                case MODE_COOLING:
+                case haier_ac_ir::MODE_COOLING:
                     this->mode = climate::CLIMATE_MODE_COOL;
                     break;
-                case MODE_HEATING:
+                case haier_ac_ir::MODE_HEATING:
                     this->mode = climate::CLIMATE_MODE_HEAT;
                     break;
-                case MODE_FAN:
+                case haier_ac_ir::MODE_FAN:
                     this->mode = climate::CLIMATE_MODE_FAN_ONLY;
                     break;
-                case MODE_DEHUMIDIFICATION:
+                case haier_ac_ir::MODE_DEHUMIDIFICATION:
                     this->mode = climate::CLIMATE_MODE_DRY;
                     break;
                 default:
@@ -448,19 +463,19 @@ protected:
         
         switch (speed)
         {
-            case SPEED_AUTO:
+            case haier_ac_ir::SPEED_AUTO:
                 this->fan_mode = climate::CLIMATE_FAN_AUTO;
                 break;
 
-            case SPEED_LOW:
+            case haier_ac_ir::SPEED_LOW:
                 this->fan_mode = climate::CLIMATE_FAN_LOW;
                 break;
             
-            case SPEED_MEDIUM:
+            case haier_ac_ir::SPEED_MEDIUM:
                 this->fan_mode = climate::CLIMATE_FAN_MEDIUM;
                 break;
 
-            case SPEED_HIGH:
+            case haier_ac_ir::SPEED_HIGH:
                 this->fan_mode = climate::CLIMATE_FAN_HIGH;
                 break;
 
