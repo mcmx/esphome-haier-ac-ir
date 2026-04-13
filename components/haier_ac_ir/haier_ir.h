@@ -190,7 +190,7 @@ protected:
                 swing = haier_ac_ir::SWING_OSCILATE;
                 break;
             default:
-                swing = climate::SWING_OFF;
+                swing = haier_ac_ir::SWING_OFF;
         }
         
         bool state;
@@ -266,6 +266,8 @@ protected:
             case climate::CLIMATE_PRESET_BOOST:
                 silent = false;
                 turbo = true;
+                break;
+            default:
                 break;
         }
 
