@@ -21,7 +21,7 @@ static const uint8_t PREFIX = 0b10100110;
 static const uint8_t PACKET_SIZE = 14;
 static const uint8_t BURST_SIZE = 230;
 
-static const char* const TAG = "haier.climate";
+static const char* const TAG = "haier_ac_ir.climate";
 static const int MIN_TEMP = 16;
 static const int MAX_TEMP = 30;
 static const float STEP_TEMP = 1.0f;
@@ -81,7 +81,7 @@ public:
     }
 protected:
     void printBin(uint8_t bin) {
-        ESP_LOGD("custom", "%c%c%c%c%c%c%c%c",
+        ESP_LOGD(TAG, "%c%c%c%c%c%c%c%c",
             ((bin) & 0x80 ? '1' : '0'),
             ((bin) & 0x40 ? '1' : '0'),
             ((bin) & 0x20 ? '1' : '0'),
@@ -94,7 +94,7 @@ protected:
     }
 
     void printBinR(uint8_t bin) {
-        ESP_LOGD("custom", "%c%c%c%c%c%c%c%c",
+        ESP_LOGD(TAG, "%c%c%c%c%c%c%c%c",
             ((bin) & 0x01 ? '1' : '0'),
             ((bin) & 0x02 ? '1' : '0'),
             ((bin) & 0x04 ? '1' : '0'),
@@ -162,48 +162,48 @@ protected:
 
         uint8_t swing;
         switch (this->swing_mode) {
-            case CLIMATE_SWING_OFF:
+            case climate::CLIMATE_SWING_OFF:
                 swing = SWING_OFF;
                 break;
-            case CLIMATE_SWING_VERTICAL:
+            case climate::CLIMATE_SWING_VERTICAL:
                 swing = SWING_UP_WIDE;
                 break;
-            case CLIMATE_SWING_HORIZONTAL:
+            case climate::CLIMATE_SWING_HORIZONTAL:
                 swing = SWING_DOWN_WIDE;
                 break;
-            case CLIMATE_SWING_BOTH:
+            case climate::CLIMATE_SWING_BOTH:
                 swing = SWING_OSCILATE;
                 break;
             default:
-                swing = SWING_OFF;
+                swing = climate::SWING_OFF;
         }
         
         bool state;
         uint8_t mode;
         switch (this->mode)
         {
-            case CLIMATE_MODE_OFF:
+            case climate::CLIMATE_MODE_OFF:
                 state = false;
                 mode = MODE_AUTO;
                 break;
-            case CLIMATE_MODE_AUTO:
-            case CLIMATE_MODE_HEAT_COOL:
+            case climate::CLIMATE_MODE_AUTO:
+            case climate::CLIMATE_MODE_HEAT_COOL:
                 state = true;
                 mode = MODE_AUTO;
                 break;
-            case CLIMATE_MODE_COOL:
+            case climate::CLIMATE_MODE_COOL:
                 state = true;
                 mode = MODE_COOLING;
                 break;
-            case CLIMATE_MODE_HEAT:
+            case climate::CLIMATE_MODE_HEAT:
                 state = true;
                 mode = MODE_HEATING;
                 break;
-            case CLIMATE_MODE_FAN_ONLY:
+            case climate::CLIMATE_MODE_FAN_ONLY:
                 state = true;
                 mode = MODE_FAN;
                 break;
-            case CLIMATE_MODE_DRY:
+            case climate::CLIMATE_MODE_DRY:
                 state = true;
                 mode = MODE_DEHUMIDIFICATION;
                 break;
@@ -216,19 +216,19 @@ protected:
         uint8_t speed;
         switch (this->fan_mode.value_or(255))
         {
-            case CLIMATE_FAN_AUTO:
+            case climate::CLIMATE_FAN_AUTO:
                 speed = SPEED_AUTO;
                 break;
 
-            case CLIMATE_FAN_LOW:
+            case climate::CLIMATE_FAN_LOW:
                 speed = SPEED_LOW;
                 break;
             
-            case CLIMATE_FAN_MEDIUM:
+            case climate::CLIMATE_FAN_MEDIUM:
                 speed = SPEED_MEDIUM;
                 break;
 
-            case CLIMATE_FAN_HIGH:
+            case climate::CLIMATE_FAN_HIGH:
                 speed = SPEED_HIGH;
                 break;
 
@@ -240,15 +240,15 @@ protected:
         bool silent, turbo;
             
         switch (this->preset.value_or(255)) {
-            case CLIMATE_PRESET_NONE:
+            case climate::CLIMATE_PRESET_NONE:
                 silent = false;
                 turbo = false;
                 break;
-            case CLIMATE_PRESET_SLEEP:
+            case climate::CLIMATE_PRESET_SLEEP:
                 silent = true;
                 turbo = false;
                 break;
-            case CLIMATE_PRESET_BOOST:
+            case climate::CLIMATE_PRESET_BOOST:
                 silent = false;
                 turbo = true;
                 break;
@@ -296,7 +296,7 @@ protected:
     bool on_receive(remote_base::RemoteReceiveData data) override
     {
         if (data.size() != BURST_SIZE) {
-            ESP_LOGD("custom", "wrong data size %d", data.size());
+            ESP_LOGD(TAG, "wrong data size %d", data.size());
             return false;
         }
 
@@ -304,14 +304,14 @@ protected:
 
         for(int i = 0; i < 2; i++) {
             // TODO: check preamble
-            ESP_LOGV("custom", "p %d", data.peek());
-            ESP_LOGV("custom", "p %d", data.peek(1));
+            ESP_LOGV(TAG, "p %d", data.peek());
+            ESP_LOGV(TAG, "p %d", data.peek(1));
 
             data.advance(2);
         }
 
-        // ESP_LOGD("custom", "p %d", data.peek());
-        // ESP_LOGD("custom", "p %d", data.peek(1));
+        // ESP_LOGD(TAG, "p %d", data.peek());
+        // ESP_LOGD(TAG, "p %d", data.peek(1));
         // data.advance(2);
         
         uint8_t raw[PACKET_SIZE];
@@ -322,14 +322,14 @@ protected:
             raw[i] = 0;
 
             for (uint8_t mask = 1; mask != 0; mask <<= 1) {
-                // ESP_LOGD("custom", "%d %d", data.peek());
+                // ESP_LOGD(TAG, "%d %d", data.peek());
                 // data.advance();
 
-                // ESP_LOGD("custom", "index %d", data.get_index());
-                // ESP_LOGD("custom", "%d mark %d", data.get_index(), data.peek());
+                // ESP_LOGD(TAG, "index %d", data.get_index());
+                // ESP_LOGD(TAG, "%d mark %d", data.get_index(), data.peek());
 
                 if (!data.expect_mark(MARK)) {
-                    ESP_LOGV("custom", "wrong mark %d", data.peek());
+                    ESP_LOGV(TAG, "wrong mark %d", data.peek());
                     // data.advance();
                     return false;
                 }
@@ -345,7 +345,7 @@ protected:
                     wrong = false;
                 } else {
                     wrong = true;
-                    ESP_LOGV("custom", "wrong bit %d", data.peek());
+                    ESP_LOGV(TAG, "wrong bit %d", data.peek());
 
                     data.advance();
                 }
@@ -368,28 +368,27 @@ protected:
 
 
         if (size != 112) {
-            ESP_LOGV("custom", "wrong size %d", size);
+            ESP_LOGV(TAG, "wrong size %d", size);
 
             return false;
         }
 
         for (uint8_t i = 0; i < sizeof(raw); i++) {
-            this->printBinR(raw[i]); 
+            this->printBinR(raw[i]);
         }
         
         auto prefix = this->readUnallinedByte(raw, 0, 8);
         if (prefix != PREFIX) {
-            ESP_LOGV("custom", "wrong prefix %d", prefix);
+            ESP_LOGV(TAG, "wrong prefix %d", prefix);
             return false;
-        } 
+        }
 
         uint8_t checksum_calc = this->calc_checksum_r(raw);
 
         auto checksum = this->readUnallinedByte(raw, 104, 8);
         
         if (checksum != checksum_calc) {
-            ESP_LOGD("custom", "wrong checksum %d. calc: %d", checksum, checksum_calc);
-
+            ESP_LOGD(TAG, "wrong checksum %d. calc: %d", checksum, checksum_calc);
             return false;
         }
 
@@ -405,44 +404,44 @@ protected:
         // Костыль
         switch (swing) {
             case SWING_OFF:
-                this->swing_mode = CLIMATE_SWING_OFF;
+                this->swing_mode = climate::CLIMATE_SWING_OFF;
                 break;
             case SWING_UP:
             case SWING_UP_WIDE:
-                this->swing_mode = CLIMATE_SWING_VERTICAL;
+                this->swing_mode = climate::CLIMATE_SWING_VERTICAL;
                 break;
             case SWING_DOWN_WIDE:
-                this->swing_mode = CLIMATE_SWING_HORIZONTAL;
+                this->swing_mode = climate::CLIMATE_SWING_HORIZONTAL;
                 break;
             case SWING_OSCILATE:
-                this->swing_mode = CLIMATE_SWING_BOTH;
+                this->swing_mode = climate::CLIMATE_SWING_BOTH;
                 break;
             default:
-                this->swing_mode = CLIMATE_SWING_OFF;
+                this->swing_mode = climate::CLIMATE_SWING_OFF;
         }
 
         if (!state) {
-            this->mode = CLIMATE_MODE_OFF;
+            this->mode = climate::CLIMATE_MODE_OFF;
         } else {
             switch (mode)
             {
                 case MODE_AUTO:
-                    this->mode = CLIMATE_MODE_HEAT_COOL;
+                    this->mode = climate::CLIMATE_MODE_HEAT_COOL;
                     break;
                 case MODE_COOLING:
-                    this->mode = CLIMATE_MODE_COOL;
+                    this->mode = climate::CLIMATE_MODE_COOL;
                     break;
                 case MODE_HEATING:
-                    this->mode = CLIMATE_MODE_HEAT;
+                    this->mode = climate::CLIMATE_MODE_HEAT;
                     break;
                 case MODE_FAN:
-                    this->mode = CLIMATE_MODE_FAN_ONLY;
+                    this->mode = climate::CLIMATE_MODE_FAN_ONLY;
                     break;
                 case MODE_DEHUMIDIFICATION:
-                    this->mode = CLIMATE_MODE_DRY;
+                    this->mode = climate::CLIMATE_MODE_DRY;
                     break;
                 default:
-                    this->mode = CLIMATE_MODE_AUTO;
+                    this->mode = climate::CLIMATE_MODE_AUTO;
                     break;
             }
         }
@@ -450,32 +449,32 @@ protected:
         switch (speed)
         {
             case SPEED_AUTO:
-                this->fan_mode = CLIMATE_FAN_AUTO;
+                this->fan_mode = climate::CLIMATE_FAN_AUTO;
                 break;
 
             case SPEED_LOW:
-                this->fan_mode = CLIMATE_FAN_LOW;
+                this->fan_mode = climate::CLIMATE_FAN_LOW;
                 break;
             
             case SPEED_MEDIUM:
-                this->fan_mode = CLIMATE_FAN_MEDIUM;
+                this->fan_mode = climate::CLIMATE_FAN_MEDIUM;
                 break;
 
             case SPEED_HIGH:
-                this->fan_mode = CLIMATE_FAN_HIGH;
+                this->fan_mode = climate::CLIMATE_FAN_HIGH;
                 break;
 
             default:
-                this->fan_mode = CLIMATE_FAN_AUTO;
+                this->fan_mode = climate::CLIMATE_FAN_AUTO;
                 break;
         }
 
         if (silent) {
-            this->preset = CLIMATE_PRESET_SLEEP;
+            this->preset = climate::CLIMATE_PRESET_SLEEP;
         } else if (turbo) {
-            this->preset = CLIMATE_PRESET_BOOST;
+            this->preset = climate::CLIMATE_PRESET_BOOST;
         } else {
-            this->preset = CLIMATE_PRESET_NONE;
+            this->preset = climate::CLIMATE_PRESET_NONE;
         }
 
         this->publish_state();
