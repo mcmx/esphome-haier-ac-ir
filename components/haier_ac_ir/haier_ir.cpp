@@ -132,18 +132,18 @@ void HaierIRClimate::transmit_state() {
   this->setBits(raw, temp_code, 8, 8);   // full byte 1
 
   // === Current Time (very important for this protocol) ===
-  ESPTime now = ESPTime::null();
-  auto *time_comp = App.get_time_component();  // This is the safe way in custom components
-  if (time_comp != nullptr) {
-    now = time_comp->now();
-  }
+//   ESPTime now = ESPTime::null();
+//   auto *time_comp = App.get_time_component();  // This is the safe way in custom components
+//   if (time_comp != nullptr) {
+//     now = time_comp->now();
+//   }
 
-  if (now.is_valid()) {
-    this->setBits(raw, now.hour, 16, 8);     // byte 2: hour (matches your logs: 0F=15, 10=16)
-    this->setBits(raw, now.minute, 32, 8);   // byte 4: minutes (this is approximate - may need fine-tuning)
-  } else {
-    ESP_LOGW(TAG, "No valid time available - sending packet without time");
-  }
+//   if (now.is_valid()) {
+//     this->setBits(raw, now.hour, 16, 8);     // byte 2: hour (matches your logs: 0F=15, 10=16)
+//     this->setBits(raw, now.minute, 32, 8);   // byte 4: minutes (this is approximate - may need fine-tuning)
+//   } else {
+//     ESP_LOGW(TAG, "No valid time available - sending packet without time");
+//   }
 
   // === Swing ===
   uint8_t swing = haier_ac_ir::SWING_OFF;
@@ -220,151 +220,6 @@ void HaierIRClimate::transmit_state() {
 
   dst->item(MARK, -1000);   // ending gap
   transmit.perform();
-}
-{
-    uint8_t raw[PACKET_SIZE];
-
-    for (uint8_t i = 0; i < sizeof(raw); i++) {
-        raw[i] = 0;
-    }
-
-    this->setByte(raw, PREFIX, 0, 8);
-
-    uint8_t temp = this->target_temperature - 16;
-
-    uint8_t swing;
-    switch (this->swing_mode) {
-        case climate::CLIMATE_SWING_OFF:
-            swing = haier_ac_ir::SWING_OFF;
-            break;
-        case climate::CLIMATE_SWING_VERTICAL:
-            swing = haier_ac_ir::SWING_UP_WIDE;
-            break;
-        case climate::CLIMATE_SWING_HORIZONTAL:
-            swing = haier_ac_ir::SWING_DOWN_WIDE;
-            break;
-        case climate::CLIMATE_SWING_BOTH:
-            swing = haier_ac_ir::SWING_OSCILATE;
-            break;
-        default:
-            swing = haier_ac_ir::SWING_OFF;
-    }
-    
-    bool state;
-    uint8_t mode;
-    switch (this->mode)
-    {
-        case climate::CLIMATE_MODE_OFF:
-            state = false;
-            mode = haier_ac_ir::MODE_AUTO;
-            break;
-        case climate::CLIMATE_MODE_AUTO:
-        case climate::CLIMATE_MODE_HEAT_COOL:
-            state = true;
-            mode = haier_ac_ir::MODE_AUTO;
-            break;
-        case climate::CLIMATE_MODE_COOL:
-            state = true;
-            mode = haier_ac_ir::MODE_COOLING;
-            break;
-        case climate::CLIMATE_MODE_HEAT:
-            state = true;
-            mode = haier_ac_ir::MODE_HEATING;
-            break;
-        case climate::CLIMATE_MODE_FAN_ONLY:
-            state = true;
-            mode = haier_ac_ir::MODE_FAN;
-            break;
-        case climate::CLIMATE_MODE_DRY:
-            state = true;
-            mode = haier_ac_ir::MODE_DEHUMIDIFICATION;
-            break;
-        default:
-            state = false;
-            mode = haier_ac_ir::MODE_AUTO;
-            break;
-    }
-
-    uint8_t speed;
-    switch (this->fan_mode.value_or(climate::CLIMATE_FAN_ON))
-    {
-        case climate::CLIMATE_FAN_AUTO:
-            speed = haier_ac_ir::SPEED_AUTO;
-            break;
-
-        case climate::CLIMATE_FAN_LOW:
-            speed = haier_ac_ir::SPEED_LOW;
-            break;
-        
-        case climate::CLIMATE_FAN_MEDIUM:
-            speed = haier_ac_ir::SPEED_MEDIUM;
-            break;
-
-        case climate::CLIMATE_FAN_HIGH:
-            speed = haier_ac_ir::SPEED_HIGH;
-            break;
-
-        default:
-            speed = haier_ac_ir::SPEED_AUTO;
-            break;
-    }
-
-    bool silent, turbo = false;
-        
-    switch (this->preset.value_or(climate::CLIMATE_PRESET_NONE)) {
-        case climate::CLIMATE_PRESET_NONE:
-            silent = false;
-            turbo = false;
-            break;
-        case climate::CLIMATE_PRESET_SLEEP:
-            silent = true;
-            turbo = false;
-            break;
-        case climate::CLIMATE_PRESET_BOOST:
-            silent = false;
-            turbo = true;
-            break;
-        default:
-            break;
-    }
-
-
-    this->setByte(raw, temp, 8, 4);
-    this->setByte(raw, swing, 12, 4);
-    this->setByte(raw, state, 33, 1);
-    this->setByte(raw, mode, 56, 3);
-    this->setByte(raw, speed, 40, 3);
-    this->setByte(raw, silent, 48, 1);
-    this->setByte(raw, turbo, 49, 1);
-    
-    this->setByte(raw, this->calc_checksum(raw), 13 * 8, 8);
-
-    for (uint8_t i = 0; i < sizeof(raw); i++) {
-        this->printBin(raw[i]); 
-    }
-    
-    auto transmit = this->transmitter_->transmit();
-    auto dst = transmit.get_data();
-    
-    dst->set_carrier_frequency(38000);
-    dst->reserve(BURST_SIZE);
-
-    int cnt = 0;
-    for (int i = 0; i < 2; i++) {
-        dst->item(PREAMBULE[i * 2], PREAMBULE[i * 2 + 1]);
-        cnt++;
-    }
-
-    for (uint8_t i = 0; i < sizeof(raw); i++) {
-        for (uint8_t mask = 1 << 7; mask != 0; mask >>= 1) {
-            dst->item(MARK, raw[i] & mask ? SPACE_ONE : SPACE_ZERO);
-            cnt++;
-        }
-    }
-
-    dst->item(MARK, -1000);
-
-    transmit.perform();
 }
 
 bool HaierIRClimate::on_receive(remote_base::RemoteReceiveData data)
