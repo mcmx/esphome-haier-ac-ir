@@ -41,7 +41,7 @@ climate::ClimateTraits HaierIRClimate::traits() {
   return traits;
 }
 
-void printBin(uint8_t bin) {
+void HaierIRClimate::printBin(uint8_t bin) {
     ESP_LOGD(TAG, "%c%c%c%c%c%c%c%c",
         ((bin) & 0x80 ? '1' : '0'),
         ((bin) & 0x40 ? '1' : '0'),
@@ -54,7 +54,7 @@ void printBin(uint8_t bin) {
     );
 }
 
-void printBinR(uint8_t bin) {
+void HaierIRClimate::printBinR(uint8_t bin) {
     ESP_LOGD(TAG, "%c%c%c%c%c%c%c%c",
         ((bin) & 0x01 ? '1' : '0'),
         ((bin) & 0x02 ? '1' : '0'),
@@ -68,7 +68,7 @@ void printBinR(uint8_t bin) {
 }
 
 // говнокод
-uint8_t readUnallinedByte(uint8_t array[], uint8_t offset, uint8_t length) {
+uint8_t HaierIRClimate::readUnallinedByte(uint8_t array[], uint8_t offset, uint8_t length) {
     uint8_t result = 0;
 
     uint8_t mask = 1 << (length - 1);
@@ -85,7 +85,7 @@ uint8_t readUnallinedByte(uint8_t array[], uint8_t offset, uint8_t length) {
     return result;
 }
 
-void setByte(uint8_t array[], uint8_t value, uint8_t offset, uint8_t length) {
+void HaierIRClimate::setByte(uint8_t array[], uint8_t value, uint8_t offset, uint8_t length) {
     uint8_t byte_idx = offset / 8;
     uint8_t bit_idx  = offset % 8;   // bit position inside the byte (0 = LSB)
 
@@ -104,7 +104,7 @@ void setByte(uint8_t array[], uint8_t value, uint8_t offset, uint8_t length) {
     }
 }
 
-uint8_t calc_checksum(uint8_t array[])
+uint8_t HaierIRClimate::calc_checksum(uint8_t array[])
 {
     uint8_t checksum = 0;
     
@@ -115,7 +115,7 @@ uint8_t calc_checksum(uint8_t array[])
     return checksum;
 }
 
-uint8_t calc_checksum_r(uint8_t array[]) {
+uint8_t HaierIRClimate::calc_checksum_r(uint8_t array[]) {
     uint8_t checksum = 0;
     
     for (uint8_t i = 0; i < PACKET_SIZE - 1; i++) {
@@ -125,7 +125,7 @@ uint8_t calc_checksum_r(uint8_t array[]) {
     return checksum;
 }
 
-void transmit_state() override
+void HaierIRClimate::transmit_state()
 {
     uint8_t raw[PACKET_SIZE];
 
@@ -272,7 +272,7 @@ void transmit_state() override
     transmit.perform();
 }
 
-bool on_receive(remote_base::RemoteReceiveData data) override
+bool HaierIRClimate::on_receive(remote_base::RemoteReceiveData data)
 {
     if (data.size() != BURST_SIZE) {
         ESP_LOGD(TAG, "wrong data size %d", data.size());
