@@ -1,6 +1,8 @@
 import esphome.codegen as cg
 from esphome.components import climate_ir
 
+AUTO_LOAD = ["climate_ir"]
+CODEOWNERS = ["@mcmx"]
 
 haier_ac_ir_ns = cg.esphome_ns.namespace('haier_ac_ir')
 HaierACIRClimate = haier_ac_ir_ns.class_('HaierACIRClimate', climate_ir.ClimateIR)
