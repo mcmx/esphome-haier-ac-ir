@@ -33,7 +33,7 @@ climate::ClimateTraits HaierIRClimate::traits() {
   traits.set_supported_fan_modes(
       {climate::CLIMATE_FAN_AUTO, climate::CLIMATE_FAN_LOW, climate::CLIMATE_FAN_MEDIUM, climate::CLIMATE_FAN_HIGH});
 
-  traits.set_supported_swing_modes({climate::CLIMATE_SWING_OFF, climate::CLIMATE_SWING_HORIZONTAL});
+  traits.set_supported_swing_modes({climate::CLIMATE_SWING_OFF, climate::CLIMATE_SWING_VERTICAL});
 
   traits.set_supported_presets({climate::CLIMATE_PRESET_NONE, climate::CLIMATE_PRESET_ECO,
                                 climate::CLIMATE_PRESET_BOOST, climate::CLIMATE_PRESET_SLEEP});
@@ -214,7 +214,7 @@ void HaierIRClimate::transmit_state()
             break;
     }
 
-    bool silent, turbo;
+    bool silent, turbo = false;
         
     switch (this->preset.value_or(climate::CLIMATE_PRESET_NONE)) {
         case climate::CLIMATE_PRESET_NONE:
