@@ -1,6 +1,7 @@
 #include "haier_ir.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
+#include "esphome/components/remote_base/haier_protocol.h"
 
 namespace esphome {
 namespace haier_ac_ir {
@@ -120,35 +121,110 @@ uint8_t HaierIRClimate::calc_checksum_r(uint8_t array[]) {
 }
 
 void HaierIRClimate::transmit_state() {
-  uint8_t raw[PACKET_SIZE] = {0};
+    std::vector<uint8_t> packet(PACKET_SIZE, 0x00);
+    packet[0] = 0xA6; // Header
 
-  // Byte 0: Fixed prefix
-  this->setBits(raw, PREFIX, 0, 8);                    // A6
+    // --- Byte 1: Temperature ---
+    packet[1] = (uint8_t)(this->target_temperature - 16);
 
-  // Byte 1: Temperature (main fix)
-  // 27°C → 0xBC
-  // 28°C → 0xCC
-  // This mapping matches your captured packets exactly
-  uint8_t temp_code = 0xBC + (this->target_temperature - 27) * 0x10;
-  this->setBits(raw, temp_code, 8, 8);
+    // --- Byte 2: Mode ---
+    if (this->mode == climate::CLIMATE_MODE_OFF) {
+        packet[2] = last_mode_val_; 
+    } else {
+        switch (this->mode) {
+            case climate::CLIMATE_MODE_COOL:      packet[2] = 0x01; break;
+            case climate::CLIMATE_MODE_DRY:       packet[2] = 0x02; break;
+            case climate::CLIMATE_MODE_FAN_ONLY:  packet[2] = 0x03; break;
+            case climate::CLIMATE_MODE_HEAT:      packet[2] = 0x04; break;
+            default:                              packet[2] = 0x00; break;
+        }
+        last_mode_val_ = packet[2];
+    }
 
-  // Current time (Hour in byte 2, Minutes in byte 4)
-//   ESPTime now = ESPTime::null();
-//   auto *time_comp = App.get_time_component();
-//   if (time_comp != nullptr) {
-//     now = time_comp->now();
-//   }
+    // --- Byte 3: Fan Speed ---
+    switch (this->fan_mode.value()) {
+        case climate::CLIMATE_FAN_LOW:    packet[3] = 0x01; break;
+        case climate::CLIMATE_FAN_MEDIUM: packet[3] = 0x02; break;
+        case climate::CLIMATE_FAN_HIGH:   packet[3] = 0x03; break;
+        default:                          packet[3] = 0x00; break;
+    }
 
-//   if (now.is_valid()) {
-//     this->setBits(raw, now.hour,   16, 8);   // Byte 2: Hour
-//     this->setBits(raw, now.minute, 32, 8);   // Byte 4: Minutes
-//   } else {
-//     ESP_LOGW(TAG, "Time not available, sending without time");
-//   }
+    // --- Byte 4: Swing ---
+    packet[4] = (this->swing_mode == climate::CLIMATE_SWING_VERTICAL) ? 0x01 : 0x00;
 
-  // Swing (byte ~1.5, bits 12-15)
-  uint8_t swing_val = haier_ac_ir::SWING_OFF;
-  switch (this->swing_mode) {
+    // --- Byte 5: POWER & AUX (Bitmask Logic) ---
+    uint8_t byte5 = 0x00;
+    if (this->mode != climate::CLIMATE_MODE_OFF) {
+        byte5 |= 0x40; // Set Bit 6 to 1 (Power On)
+    } else {
+        byte5 &= ~0x40; // Set Bit 6 to 0 (Power Off)
+    }
+    
+    // Note: If you find that 'Turbo' is Bit 0, you would add:
+    // if (this->preset == CLIMATE_PRESET_BOOST) byte5 |= 0x01;
+    
+    packet[5] = byte5;
+
+    // --- Byte 12: Command Trigger ---
+    uint8_t trigger = 0x00;
+    if (this->mode != last_mode_) {
+        trigger = (this->mode == climate::CLIMATE_MODE_OFF) ? 0x05 : 0x04;
+    } else if (this->target_temperature != last_temp_) {
+        trigger = (this->target_temperature > last_temp_) ? 0x00 : 0x01;
+    } else if (this->fan_mode != last_fan_) {
+        trigger = 0x02;
+    } else if (this->swing_mode != last_swing_) {
+        trigger = 0x03;
+    }
+    packet[12] = trigger;
+    
+    // --- Send via haier_protocol.cpp ---
+    auto transmit = this->transmitter_->transmit();
+    remote_base::HaierProtocol protocol;
+    remote_base::HaierData data;
+    data.data = packet; 
+
+    protocol.encode(transmit.get_data(), data);
+    transmit.perform();
+
+    // Sync states
+    last_temp_ = this->target_temperature;
+    last_mode_ = this->mode;
+    last_fan_ = this->fan_mode.value();
+    last_swing_ = this->swing_mode;
+
+    return;
+
+    uint8_t raw[PACKET_SIZE] = {0};
+
+    // Byte 0: Fixed prefix
+    this->setBits(raw, PREFIX, 0, 8); // A6
+
+    // Byte 1: Temperature (main fix)
+    // 27°C → 0xBC
+    // 28°C → 0xCC
+    // This mapping matches your captured packets exactly
+    uint8_t temp_code = 0xBC + (this->target_temperature - 27) * 0x10;
+    this->setBits(raw, temp_code, 8, 8);
+
+    // Current time (Hour in byte 2, Minutes in byte 4)
+    //   ESPTime now = ESPTime::null();
+    //   auto *time_comp = App.get_time_component();
+    //   if (time_comp != nullptr) {
+    //     now = time_comp->now();
+    //   }
+
+    //   if (now.is_valid()) {
+    //     this->setBits(raw, now.hour,   16, 8);   // Byte 2: Hour
+    //     this->setBits(raw, now.minute, 32, 8);   // Byte 4: Minutes
+    //   } else {
+    //     ESP_LOGW(TAG, "Time not available, sending without time");
+    //   }
+
+    // Swing (byte ~1.5, bits 12-15)
+    uint8_t swing_val = haier_ac_ir::SWING_OFF;
+    switch (this->swing_mode)
+    {
     case climate::CLIMATE_SWING_OFF:        swing_val = haier_ac_ir::SWING_OFF; break;
     case climate::CLIMATE_SWING_VERTICAL:   swing_val = haier_ac_ir::SWING_UP_WIDE; break;
     case climate::CLIMATE_SWING_HORIZONTAL: swing_val = haier_ac_ir::SWING_DOWN_WIDE; break;
@@ -224,104 +300,12 @@ void HaierIRClimate::transmit_state() {
 }
 
 
-bool HaierIRClimate::on_receive(remote_base::RemoteReceiveData data)
+bool HaierIRClimate::on_receive(remote_base::RemoteReceiveData src)
 {
-    if (data.size() != BURST_SIZE) {
-        ESP_LOGD(TAG, "wrong data size %d", data.size());
-        return false;
-    }
+    HaierData data = HaierProtocol::decode(src);
+    HaierProtocol::dump(data);
 
-    // data.set_tolerance(200);
-
-    for(int i = 0; i < 2; i++) {
-        // TODO: check preamble
-        ESP_LOGV(TAG, "p %d", data.peek());
-        ESP_LOGV(TAG, "p %d", data.peek(1));
-
-        data.advance(2);
-    }
-
-    // ESP_LOGD(TAG, "p %d", data.peek());
-    // ESP_LOGD(TAG, "p %d", data.peek(1));
-    // data.advance(2);
-    
-    uint8_t raw[PACKET_SIZE];
-
-    uint16_t size = 0;
-
-    for (uint8_t i = 0; i < sizeof(raw); i++) {
-        raw[i] = 0;
-
-        for (uint8_t mask = 1; mask != 0; mask <<= 1) {
-            // ESP_LOGD(TAG, "%d %d", data.peek());
-            // data.advance();
-
-            // ESP_LOGD(TAG, "index %d", data.get_index());
-            // ESP_LOGD(TAG, "%d mark %d", data.get_index(), data.peek());
-
-            if (!data.expect_mark(MARK)) {
-                ESP_LOGV(TAG, "wrong mark %d", data.peek());
-                // data.advance();
-                return false;
-            }
-
-            bool b = false;
-            bool wrong = false;
-
-            if (data.expect_space(SPACE_ZERO)) {
-                b = false; 
-                wrong = false;
-            } else if (data.expect_space(SPACE_ONE)) {
-                b = true; 
-                wrong = false;
-            } else {
-                wrong = true;
-                ESP_LOGV(TAG, "wrong bit %d", data.peek());
-
-                data.advance();
-            }
-                
-            if (b && !wrong) {
-                raw[i] |= mask;
-            }
-            
-            size++;
-
-            if (data.size() <= data.get_index()) {
-                break;
-            }
-        }
-
-        if (data.size() <= data.get_index()) {
-            break;
-        }
-    }
-
-
-    if (size != 112) {
-        ESP_LOGV(TAG, "wrong size %d", size);
-
-        return false;
-    }
-
-    for (uint8_t i = 0; i < sizeof(raw); i++) {
-        this->printBinR(raw[i]);
-    }
-    
-    auto prefix = this->readUnallinedByte(raw, 0, 8);
-    if (prefix != PREFIX) {
-        ESP_LOGV(TAG, "wrong prefix %d", prefix);
-        return false;
-    }
-
-    uint8_t checksum_calc = this->calc_checksum_r(raw);
-
-    auto checksum = this->readUnallinedByte(raw, 104, 8);
-    
-    if (checksum != checksum_calc) {
-        ESP_LOGD(TAG, "wrong checksum %d. calc: %d", checksum, checksum_calc);
-        return false;
-    }
+    return false;
 
     auto temp = this->readUnallinedByte(raw, 8, 4);
     uint8_t swing = this->readUnallinedByte(raw, 12, 4);
