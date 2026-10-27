@@ -81,9 +81,6 @@ protected:
 
     climate::ClimateTraits traits() override;
 
-    // говнокод
-    uint8_t readUnallinedByte(uint8_t array[], uint8_t offset, uint8_t length);
-
     void transmit_state() override;
 
     bool on_receive(remote_base::RemoteReceiveData data) override;

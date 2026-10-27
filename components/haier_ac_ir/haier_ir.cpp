@@ -8,59 +8,11 @@ namespace haier_ac_ir {
 
 
 climate::ClimateTraits HaierIRClimate::traits() {
-  auto traits = climate::ClimateTraits();
-  if (this->sensor_ != nullptr) {
-    traits.add_feature_flags(climate::CLIMATE_SUPPORTS_CURRENT_TEMPERATURE);
-  }
-  traits.set_visual_min_temperature(MIN_TEMP);
-  traits.set_visual_max_temperature(MAX_TEMP);
-  traits.set_visual_temperature_step(1.0f);
-  traits.set_supported_modes({climate::CLIMATE_MODE_OFF});
-
-  if (this->supports_cool_)
-    traits.add_supported_mode(climate::CLIMATE_MODE_COOL);
-  if (this->supports_heat_)
-    traits.add_supported_mode(climate::CLIMATE_MODE_HEAT);
-
-  if (this->supports_cool_ && this->supports_heat_)
-    traits.add_supported_mode(climate::CLIMATE_MODE_HEAT_COOL);
-
-  if (this->supports_dry_)
-    traits.add_supported_mode(climate::CLIMATE_MODE_DRY);
-  if (this->supports_fan_only_)
-    traits.add_supported_mode(climate::CLIMATE_MODE_FAN_ONLY);
-
-  // Default to only 3 levels in ESPHome even if most unit supports 4. The 3rd level is not used.
-  traits.set_supported_fan_modes(
-      {climate::CLIMATE_FAN_AUTO, climate::CLIMATE_FAN_LOW, climate::CLIMATE_FAN_MEDIUM, climate::CLIMATE_FAN_HIGH});
-
-  traits.set_supported_swing_modes({climate::CLIMATE_SWING_OFF, climate::CLIMATE_SWING_VERTICAL, 
-                                    climate::CLIMATE_SWING_HORIZONTAL, climate::CLIMATE_SWING_BOTH}
-);
-
-  traits.set_supported_presets({climate::CLIMATE_PRESET_NONE, climate::CLIMATE_PRESET_ECO,
-                                climate::CLIMATE_PRESET_BOOST, climate::CLIMATE_PRESET_SLEEP});
-
+  // The base class builds the traits from the mode, fan, swing and preset masks.
+  auto traits = climate_ir::ClimateIR::traits();
+  traits.add_supported_preset(climate::CLIMATE_PRESET_ECO);
   return traits;
 }
-
-uint8_t HaierIRClimate::readUnallinedByte(uint8_t array[], uint8_t offset, uint8_t length) {
-    uint8_t result = 0;
-
-    uint8_t mask = 1 << (length - 1);
-    for (uint8_t i = offset; i < offset + length; i++) {
-        bool b = (array[i / 8] >> (i % 8)) & 0b1;
-
-        if (b) {
-            result |= mask;
-        }
-
-        mask >>= 1;
-    }
-
-    return result;
-}
-
 
 
 void HaierIRClimate::transmit_state() {
@@ -69,6 +21,25 @@ void HaierIRClimate::transmit_state() {
 
     // --- Byte 1: Temperature ---
     packet[1] = (uint8_t)(this->target_temperature - 16) << 4; // Map 16-30°C to 0x00-0xE0 in steps of 0x10
+
+    // --- Byte 1: Swing ---
+    uint8_t swing_val = haier_ac_ir::SWING_AUTO; // default to auto if not set
+    switch (this->swing_mode){
+        case climate::CLIMATE_SWING_OFF:
+            swing_val = haier_ac_ir::SWING_1;
+            break;
+        case climate::CLIMATE_SWING_VERTICAL:
+            swing_val = haier_ac_ir::SWING_2;
+            break;
+        case climate::CLIMATE_SWING_HORIZONTAL:
+            swing_val = haier_ac_ir::SWING_3;
+            break;
+        case climate::CLIMATE_SWING_BOTH:
+            swing_val = haier_ac_ir::SWING_AUTO;
+            break;
+        default: break;
+    }
+    packet[1] = packet[1] | swing_val; // Set lower 4 bits for swing
 
     // --- Byte 8: Mode ---
 
@@ -95,26 +66,6 @@ void HaierIRClimate::transmit_state() {
         case climate::CLIMATE_FAN_HIGH:   packet[5] = haier_ac_ir::SPEED_HIGH; break;
         default:                          packet[5] = haier_ac_ir::SPEED_AUTO; break;
     }
-
-    // --- Byte 1: Swing ---
-
-    uint8_t swing_val = haier_ac_ir::SWING_AUTO; // default to auto if not set
-    switch (this->swing_mode){
-        case climate::CLIMATE_SWING_OFF:
-            swing_val = haier_ac_ir::SWING_1;
-            break;
-        case climate::CLIMATE_SWING_VERTICAL:
-            swing_val = haier_ac_ir::SWING_2;
-            break;
-        case climate::CLIMATE_SWING_HORIZONTAL:
-            swing_val = haier_ac_ir::SWING_3;
-            break;
-        case climate::CLIMATE_SWING_BOTH:
-            swing_val = haier_ac_ir::SWING_AUTO;
-            break;
-        default: break;
-    }
-    packet[1] = packet[1] | swing_val; // Set lower 4 bits for swing
 
     // --- Byte 5: POWER & AUX (Bitmask Logic) ---
     uint8_t byte5 = this->state_; // Start with previous state to preserve unchanged bits
@@ -209,12 +160,6 @@ bool HaierIRClimate::on_receive(remote_base::RemoteReceiveData src)
     ESP_LOGD(TAG, "Received Haier packet (State: %02X):", state);
     ESP_LOGD(TAG, "Received Haier packet (Mode: %02X):", mode);
     ESP_LOGD(TAG, "Received Haier packet (Button: %02X):", button);
-
-    // uint8_t swing = this->readUnallinedByte(raw, 12, 4);
-    // bool state = this->readUnallinedByte(raw, 33, 1);
-    // uint8_t mode = this->readUnallinedByte(raw, 56, 3);
-    // bool silent = this->readUnallinedByte(raw, 48, 1);
-    // bool turbo = this->readUnallinedByte(raw, 49, 1);
 
     // switch (swing) {
     //     case haier_ac_ir::SWING_OFF:

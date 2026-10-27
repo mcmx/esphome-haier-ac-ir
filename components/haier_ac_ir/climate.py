@@ -1,5 +1,5 @@
 import esphome.codegen as cg
-from esphome.components import climate_ir
+from esphome.components import climate_ir, remote_base
 
 AUTO_LOAD = ["climate_ir"]
 CODEOWNERS = ["@mcmx"]
@@ -11,4 +11,6 @@ CONFIG_SCHEMA = climate_ir.climate_ir_with_receiver_schema(HaierIRClimate)
 
 
 async def to_code(config):
+    # HaierProtocol is used directly from C++, so keep its source in the build.
+    remote_base.request_protocol("haier")
     await climate_ir.new_climate_ir(config)
