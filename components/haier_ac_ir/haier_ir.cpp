@@ -146,6 +146,12 @@ bool HaierIRClimate::on_receive(remote_base::RemoteReceiveData src)
     }
 
     remote_base::HaierData data = *maybe;
+    // Short frames decode to fewer bytes than PACKET_SIZE; reading past the end is undefined behaviour.
+    if (data.data.size() < PACKET_SIZE) {
+        ESP_LOGW(TAG, "Ignoring Haier packet: %u bytes, need %u", (unsigned) data.data.size(), (unsigned) PACKET_SIZE);
+        return false;
+    }
+
     auto temp = ((data.data[1] >> 4) & 0x0F) + 16;
     this->target_temperature = temp;
     auto swing = data.data[1] & 0x0F;
